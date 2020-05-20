@@ -10,7 +10,6 @@
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <signal.h>
 
 #define BUFSIZE 10
 #define SERVER_IP "127.0.0.1"
@@ -24,14 +23,9 @@ int main(int argc, char **argv) {
         char message[BUFSIZE];
         int str_len;
 
-        // 적절한 인자를 받도록 핸들링
-        // if(argc != 3) {
-        //         printf("Usage : %s <IP> <port> \n", argv[0]);
-        //         exit(1);
-        // }
-
         // 클라이언트 소켓 생성부.IPv4, Stream 방식 정의
-        sock = socket(PF_INET, SOCK_STREAM, 0);   
+        sock = socket(PF_INET, SOCK_STREAM, 0);
+        printf("Creating socket...\n");
         if(sock == -1) {
                 error_handling("Socket creation error\n");
                 close(sock);
@@ -44,26 +38,32 @@ int main(int argc, char **argv) {
         serv_addr.sin_addr.s_addr = inet_addr(SERVER_IP);
         serv_addr.sin_port = htons(ECHOPORT);
 
+        printf("Connecting to Host: %s:%d...\n", SERVER_IP, ECHOPORT);
         if( connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == -1) {
                 close(sock);
                 error_handling("Connection setup error: connect() error\n");
-
+        } else {
+                printf("Connection setup completed\n");
         }
 
         while(1) {
-                fputs("에코 메시지 입력(exit to quit) : ", stdout);
+                fputs("Enter message return (Type 'exit' to quit) : ", stdout);
                 fgets(message, BUFSIZE, stdin);
 
+                if (strlen(message) >= BUFSIZE) {
+                        printf("Overflow occured\n");
+                }
+                
                 // 종료 문구 기입시 종료
-                if(!strcmp(message, "exit\n")){
+                if(!strcmp(message, "exit\n")) {
                         break;
                 }
 
                 write(sock, message, strlen(message));
 
-                str_len = read(sock, message, BUFSIZE - 1);
-                message[str_len] = 0;
-                printf("서버로부터 전송된 메시지 : %s \n", message);
+                str_len = read(sock, message, BUFSIZE);
+                // message[str_len] = 0;
+                printf("Echo from server : %s \n", message);
         }          
         close(sock);
         return 0;

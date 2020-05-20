@@ -10,7 +10,6 @@
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <signal.h>
 
 #define BUFSIZE 10
 #define ECHOPORT 9999
@@ -25,13 +24,10 @@ int main(int argc, char **argv) {
         struct sockaddr_in serv_addr, clnt_addr;
         int clnt_addr_size;
 
-        // if(argc != 2) {
-        //         printf("이렇게 사용해주세요: %s <사용할 포트(1024~65535)>\n", argv[0]);
-        //         exit(1);
-        // } 
 
         // 서버 소켓 생성부. IPv4, Stream방식을 사용함을 정의. 
-        serv_sock = socket(PF_INET, SOCK_STREAM, 0);    
+        serv_sock = socket(PF_INET, SOCK_STREAM, 0);  
+        printf("Creating socket...\n");  
         if(serv_sock == -1) {
                 error_handling("Socket creation error\n");
                 close(serv_sock);
@@ -44,32 +40,40 @@ int main(int argc, char **argv) {
         // 주소 자동 지정
         serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
         serv_addr.sin_port = htons(ECHOPORT);
-
+        printf("Binding...\n");
         // 소켓에 주소 할당 및 에러 핸들링. 실패시 close
         if( bind(serv_sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == -1 ) {
                 close(serv_sock);
                 error_handling("Binding error\n");
         }
-        
         // 바인딩 성공시 리스닝 상태로 진입. backlog가 0이면 default 값이나 로컬 에코 서버이므로 무의미.
         if( listen(serv_sock, 0) == -1 )  {
                 close(serv_sock);
                 error_handling("Listening error\n");
         }
+        else {
+                printf("Server is listening on port %d...\n", ECHOPORT);
+        }
 
         clnt_addr_size = sizeof(clnt_addr);
-          
+        
         // 커넥션 셋업 요청 수락 및 에러핸들링
+        printf("Connection requested: %d", clnt_sock);
         clnt_sock = accept(serv_sock, (struct sockaddr*)&clnt_addr, &clnt_addr_size);
         if(clnt_sock == -1) {
-                close(serv_sock);
                 close(clnt_sock);
                 error_handling("Connection setup error: accpet()\n");
         }
 
+        // 클라이언트로부터 메시지 읽은 값 처리
         while((str_len = read(clnt_sock, message, BUFSIZE)) != 0 ) {
-                write(clnt_sock, message, str_len);
-                write(1, message, str_len);
+                if (strlen(message) > BUFSIZE) { // 지정된 윈도우 사이즈보다 클 경우 잘라서 보낸다.
+                        
+                } else {
+                        write(clnt_sock, message, str_len);
+                        write(1, message, str_len);
+                }
+                
         }
         /* 
           클라이언트가 종료요청을 했을 때 클라이언트 소켓 close. 
