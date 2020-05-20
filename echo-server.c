@@ -10,62 +10,72 @@
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <signal.h>
 
 #define BUFSIZE 10
+#define ECHOPORT 9999
 
 void error_handling(char *message);
 
 int main(int argc, char **argv) {
-        int serv_sock;
-        int clnt_sock;
+        // 서버는 서버-클라이언트 소켓을 모두 가져야한다.
+        int serv_sock, clnt_sock;
         char message[BUFSIZE];
         int str_len;
         struct sockaddr_in serv_addr, clnt_addr;
         int clnt_addr_size;
 
-        if(argc != 2) {
-                printf("Usage : %s <Server's Port>\n", argv[0]);
-                exit(1);
-        } 
+        // if(argc != 2) {
+        //         printf("이렇게 사용해주세요: %s <사용할 포트(1024~65535)>\n", argv[0]);
+        //         exit(1);
+        // } 
 
-        serv_sock = socket(PF_INET, SOCK_STREAM, 0);    /* 서버 소켓 생성 */
+        // 서버 소켓 생성부. IPv4, Stream방식을 사용함을 정의. 
+        serv_sock = socket(PF_INET, SOCK_STREAM, 0);    
+        if(serv_sock == -1) {
+                error_handling("Socket creation error\n");
+                close(serv_sock);
+        }
 
-        if(serv_sock == -1)
-                error_handling("socket() error");
-
+        // sockaddr_in 구조체 사용 전 초기화
         memset(&serv_addr, 0, sizeof(serv_addr));
+
         serv_addr.sin_family = AF_INET;
+        // 주소 자동 지정
         serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-        serv_addr.sin_port = htons(atoi(argv[1]));
+        serv_addr.sin_port = htons(ECHOPORT);
 
-        /* 소켓에 주소 할당 */
-        if( bind(serv_sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == -1 )
-                error_handling("bind() error");
-
-        if( listen(serv_sock, 5) == -1 )  /* 연결 요청 대기 상태로 진입 */
-                error_handling("listen() error");
+        // 소켓에 주소 할당 및 에러 핸들링. 실패시 close
+        if( bind(serv_sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == -1 ) {
+                close(serv_sock);
+                error_handling("Binding error\n");
+        }
+        
+        // 바인딩 성공시 리스닝 상태로 진입. backlog가 0이면 default 값이나 로컬 에코 서버이므로 무의미.
+        if( listen(serv_sock, 0) == -1 )  {
+                close(serv_sock);
+                error_handling("Listening error\n");
+        }
 
         clnt_addr_size = sizeof(clnt_addr);
           
-        /* 연결 요청 수락 */
+        // 커넥션 셋업 요청 수락 및 에러핸들링
         clnt_sock = accept(serv_sock, (struct sockaddr*)&clnt_addr, &clnt_addr_size);
+        if(clnt_sock == -1) {
+                close(serv_sock);
+                close(clnt_sock);
+                error_handling("Connection setup error: accpet()\n");
+        }
 
-        if(clnt_sock == -1)
-                error_handling("accept() error");
-
-
-           /* 데이터 수신 및 전송
-
-          * 클라이언트가 EOF를 보낼 때까지 데이터를 받아서 서버 콘솔에 한번 출력해 주고
-
-          * 클라이언트로 재전송해 주고 있다. */
-
-        while( (str_len = read(clnt_sock, message, BUFSIZE)) != 0 ) {
+        while((str_len = read(clnt_sock, message, BUFSIZE)) != 0 ) {
                 write(clnt_sock, message, str_len);
                 write(1, message, str_len);
         }
-
-        close(clnt_sock);       /* 연결 종료 */
+        /* 
+          클라이언트가 종료요청을 했을 때 클라이언트 소켓 close. 
+          서버는 다른 연결을 위해 프로그램이 끝날 때 까지 리스닝상태.
+        */
+        close(clnt_sock);      
         return 0;
 }
 
